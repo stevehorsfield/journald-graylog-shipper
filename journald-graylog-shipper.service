@@ -1,0 +1,41 @@
+[Unit]
+Description=Send journald logs to Graylog
+After=network-online.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+
+ExecStartPre=-/usr/bin/docker stop %n
+ExecStartPre=-/usr/bin/docker rm --force %n
+
+# File must exist for Docker volume mount to work
+ExecStartPre=/bin/touch /var/log/journald-graylog-shipper.pos
+
+ExecStartPre=/usr/bin/docker pull \
+    some-repo/journald-graylog-shipper:TAG
+
+# CPU quota limits to 30% of a single CPU at max
+ExecStart=/usr/bin/docker run \
+    -t --rm --name %n \
+    --volume /var/log/journal:/var/log/journal:ro \
+    --volume /var/log/journald-graylog-shipper.pos:/var/log/journald-graylog-shipper.pos:rw \
+    --env "GRAYLOG_GELF_ADDRESS=some-fqdn" \
+    --env "GRAYLOG_GELF_PORT=1514" \
+    --env "GRAYLOG_ENVIRONMENT=my-environment" \
+    --env "JOURNAL_CURSOR_TRACKING=/var/log/journald-graylog-shipper.pos" \
+    --env "JOURNAL_LOCATION=/var/log/journal" \
+    --network=host \
+    --privileged \
+    --memory=200M \
+    --memory-reservation=100M \
+    --cpu-quota=30000 \
+    some-repo/journald-graylog-shipper:TAG
+
+Restart=always
+RestartSec=15
+RemainAfterExit=no
+TimeoutStartSec=60
+
+[Install]
+WantedBy=multi-user.target
